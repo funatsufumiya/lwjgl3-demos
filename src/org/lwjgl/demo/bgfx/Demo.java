@@ -9,6 +9,9 @@ import org.lwjgl.glfw.*;
 import org.lwjgl.system.*;
 import org.lwjgl.system.libc.LibCStdio;
 
+import org.lwjgl.system.macosx.ObjCRuntime;
+import org.lwjgl.system.JNI;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
@@ -56,7 +59,8 @@ abstract class Demo {
         try (MemoryStack stack = MemoryStack.stackPush()) {
 
             /* Initialize GLFW, create window, pass window handle to bgfx platform data */
-
+            
+            GLFWErrorCallback.createThrow().set();
             if (!glfwInit()) {
                 throw new RuntimeException("Error initializing GLFW");
             }
@@ -64,9 +68,13 @@ abstract class Demo {
             // the client (renderer) API is managed by bgfx
             glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
+            if (Platform.get() == Platform.MACOSX) {
+                glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_FALSE);
+            }
+
             long window = glfwCreateWindow(width, height, title, 0, 0);
 
-            if (window == 0) {
+            if (window == NULL) {
                 throw new RuntimeException("Error creating GLFW window");
             }
 
@@ -84,29 +92,6 @@ abstract class Demo {
                 }
             });
 
-            BGFXPlatformData platformData = BGFXPlatformData.calloc(stack);
-
-            switch (Platform.get()) {
-                case LINUX:
-                    platformData.ndt(GLFWNativeX11.glfwGetX11Display());
-                    platformData.nwh(GLFWNativeX11.glfwGetX11Window(window));
-                    break;
-                case MACOSX:
-                    platformData.ndt(NULL);
-                    platformData.nwh(GLFWNativeCocoa.glfwGetCocoaWindow(window));
-                    break;
-                case WINDOWS:
-                    platformData.ndt(NULL);
-                    platformData.nwh(GLFWNativeWin32.glfwGetWin32Window(window));
-                    break;
-            }
-
-            platformData.context(NULL);
-            platformData.backBuffer(NULL);
-            platformData.backBufferDS(NULL);
-
-            bgfx_set_platform_data(platformData);
-
             BGFXDemoUtil.reportSupportedRenderers();
 
             /* Initialize bgfx */
@@ -114,21 +99,54 @@ abstract class Demo {
             BGFXInit init = BGFXInit.malloc(stack);
             bgfx_init_ctor(init);
             init
-                .type(renderer)
-                .vendorId(pciId)
-                .deviceId((short)0)
-                .callback(useCallbacks ? createCallbacks(stack) : null)
-                .allocator(useCustomAllocator ? createAllocator(stack) : null)
+                // .type(renderer)
+                // .vendorId(pciId)
+                // .deviceId((short)0)
+                // .callback(useCallbacks ? createCallbacks(stack) : null)
+                // .allocator(useCustomAllocator ? createAllocator(stack) : null)
                 .resolution(it -> it
                     .width(width)
                     .height(height)
                     .reset(reset));
+
+            switch (Platform.get()) {
+                case LINUX:
+                    init.platformData()
+                        .ndt(GLFWNativeX11.glfwGetX11Display())
+                        .nwh(GLFWNativeX11.glfwGetX11Window(window));
+                    break;
+                case MACOSX:
+                    // init.platformData()
+                    //     .nwh(GLFWNativeCocoa.glfwGetCocoaWindow(window));
+
+                    long objc_msgSend = ObjCRuntime.getLibrary().getFunctionAddress("objc_msgSend");
+
+                    long layer = JNI.invokePPP(ObjCRuntime.objc_getClass("CAMetalLayer"), ObjCRuntime.sel_getUid("alloc"), objc_msgSend);
+                    JNI.invokePPP(layer, ObjCRuntime.sel_getUid("init"), objc_msgSend);
+
+                    long contentView = JNI.invokePPP(GLFWNativeCocoa.glfwGetCocoaWindow(window), ObjCRuntime.sel_getUid("contentView"), objc_msgSend);
+                    JNI.invokePPPV(contentView, ObjCRuntime.sel_getUid("setLayer:"), layer, objc_msgSend);
+
+                    init.platformData()
+                        .nwh(layer);
+                    break;
+                case WINDOWS:
+                    init.platformData()
+                        .nwh(GLFWNativeWin32.glfwGetWin32Window(window));
+                    break;
+            }
+
+            // init.platformData().context(NULL);
+            // init.platformData().backBuffer(NULL);
+            // init.platformData().backBufferDS(NULL);
 
             if (!bgfx_init(init)) {
                 throw new RuntimeException("Error initializing bgfx renderer");
             }
 
             format = init.resolution().format();
+
+            apiLog("bgfx: initialized");
 
             if (renderer == BGFX_RENDERER_TYPE_COUNT) {
                 renderer = bgfx_get_renderer_type();
