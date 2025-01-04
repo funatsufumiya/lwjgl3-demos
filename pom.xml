@@ -13,7 +13,7 @@
         <maven-shade-plugin.version>3.5.1</maven-shade-plugin.version>
         <lwjgl.version>3.3.3</lwjgl.version>
         <swt.maven.version>3.123.0</swt.maven.version> <!-- contains Eclipse SWT 4.958 software -->
-        <joml.version>1.10.6-SNAPSHOT</joml.version>
+        <joml.version>1.10.8</joml.version>
         <!-- Can be overwritten via -D property during mvn invoke to specify a different demo. The package "org.lwjgl.demo." 
             is prepended automatically. -->
         <class>game.VoxelGameGL</class>
