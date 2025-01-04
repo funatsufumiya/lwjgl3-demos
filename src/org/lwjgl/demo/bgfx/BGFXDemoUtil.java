@@ -4,19 +4,47 @@
  */
 package org.lwjgl.demo.bgfx;
 
-import org.joml.Matrix4f;
-import org.joml.Matrix4x3f;
-import org.joml.Vector3f;
-import org.lwjgl.bgfx.*;
-
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.ByteBuffer;
 
-import static org.lwjgl.bgfx.BGFX.*;
+import org.joml.Matrix4f;
+import org.joml.Matrix4x3f;
+import org.joml.Vector3f;
+import static org.lwjgl.bgfx.BGFX.BGFX_ATTRIB_COLOR0;
+import static org.lwjgl.bgfx.BGFX.BGFX_ATTRIB_NORMAL;
+import static org.lwjgl.bgfx.BGFX.BGFX_ATTRIB_POSITION;
+import static org.lwjgl.bgfx.BGFX.BGFX_ATTRIB_TEXCOORD0;
+import static org.lwjgl.bgfx.BGFX.BGFX_ATTRIB_TYPE_FLOAT;
+import static org.lwjgl.bgfx.BGFX.BGFX_ATTRIB_TYPE_UINT8;
+import static org.lwjgl.bgfx.BGFX.BGFX_BUFFER_NONE;
+import static org.lwjgl.bgfx.BGFX.BGFX_RENDERER_TYPE_COUNT;
+import static org.lwjgl.bgfx.BGFX.BGFX_RENDERER_TYPE_DIRECT3D11;
+import static org.lwjgl.bgfx.BGFX.BGFX_RENDERER_TYPE_DIRECT3D12;
+import static org.lwjgl.bgfx.BGFX.BGFX_RENDERER_TYPE_METAL;
+import static org.lwjgl.bgfx.BGFX.BGFX_RENDERER_TYPE_OPENGL;
+import static org.lwjgl.bgfx.BGFX.BGFX_RENDERER_TYPE_VULKAN;
+import static org.lwjgl.bgfx.BGFX.BGFX_TEXTURE_NONE;
+import static org.lwjgl.bgfx.BGFX.bgfx_create_index_buffer;
+import static org.lwjgl.bgfx.BGFX.bgfx_create_shader;
+import static org.lwjgl.bgfx.BGFX.bgfx_create_texture;
+import static org.lwjgl.bgfx.BGFX.bgfx_create_vertex_buffer;
+import static org.lwjgl.bgfx.BGFX.bgfx_get_caps;
+import static org.lwjgl.bgfx.BGFX.bgfx_get_renderer_name;
+import static org.lwjgl.bgfx.BGFX.bgfx_get_supported_renderers;
+import static org.lwjgl.bgfx.BGFX.bgfx_make_ref;
+import static org.lwjgl.bgfx.BGFX.bgfx_make_ref_release;
+import static org.lwjgl.bgfx.BGFX.bgfx_vertex_layout_add;
+import static org.lwjgl.bgfx.BGFX.bgfx_vertex_layout_begin;
+import static org.lwjgl.bgfx.BGFX.bgfx_vertex_layout_end;
+import org.lwjgl.bgfx.BGFXMemory;
+import org.lwjgl.bgfx.BGFXReleaseFunctionCallback;
+import org.lwjgl.bgfx.BGFXVertexLayout;
 import static org.lwjgl.system.APIUtil.apiLog;
-import static org.lwjgl.system.MemoryUtil.*;
+import static org.lwjgl.system.MemoryUtil.NULL;
+import static org.lwjgl.system.MemoryUtil.memAlloc;
+import static org.lwjgl.system.MemoryUtil.nmemFree;
 
 @SuppressWarnings("StaticNonFinalField")
 final class BGFXDemoUtil {
@@ -177,6 +205,10 @@ final class BGFXDemoUtil {
             case BGFX_RENDERER_TYPE_METAL:
                 resourcePath += "metal/";
                 break;
+            
+            case BGFX_RENDERER_TYPE_VULKAN:
+                resourcePath += "spirv/";
+                break;
 
             default:
                 throw new IOException("No demo shaders supported for " + bgfx_get_renderer_name(renderer) + " renderer");
@@ -187,7 +219,7 @@ final class BGFXDemoUtil {
         return bgfx_create_shader(bgfx_make_ref_release(shaderCode, releaseMemoryCb, NULL));
     }
 
-    static short loadShader(char[] shaderCodeGLSL, char[] shaderCodeD3D9, char[] shaderCodeD3D11, char[] shaderCodeMtl) throws IOException {
+    static short loadShader(char[] shaderCodeGLSL, char[] shaderCodeD3D9, char[] shaderCodeD3D11, char[] shaderCodeMtl, char[] shaderCodeSpirv) throws IOException {
         char[] sc;
 
         switch (renderer) {
@@ -203,6 +235,13 @@ final class BGFXDemoUtil {
 
             case BGFX_RENDERER_TYPE_METAL:
                 sc = shaderCodeMtl;
+                break;
+
+            case BGFX_RENDERER_TYPE_VULKAN:
+                if (shaderCodeSpirv == null || shaderCodeSpirv.length == 0) {
+                    throw new IOException("No SPIR-V shader code provided");
+                }
+                sc = shaderCodeSpirv;
                 break;
 
             default:
